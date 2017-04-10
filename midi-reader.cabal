@@ -27,6 +27,7 @@ executable midi-reader-exe
                      , midi-reader
                      , parsec
                      , word8
+                     , bytestring
   default-language:    Haskell2010
 
 test-suite midi-reader-test
