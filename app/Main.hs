@@ -5,6 +5,7 @@ import           Data.ByteString.Lazy as BS
 import           Data.Word8
 -- import           Text.Parsec          hiding (getInput)
 import           Control.Applicative
+import           Data.Bits
 import           Text.Parsec.Prim
 
 
@@ -57,8 +58,13 @@ data MetaEvent =  CommentEvent [Word8]
 -- Major key or Minor Key
 data Key = MajorKey | MinorKey deriving (Show, Eq)
 
--- data ParseError =  FormatError String
---                  | UnexpectedError String
+
+-- Convert [Word8] to (Num a => a)
+-- hint: http://stackoverflow.com/a/31208816/2885946
+bytesToNum :: (Num a, Bits a) => [Word8] -> a
+bytesToNum = Prelude.foldl unstep 0
+  where
+    unstep a b = a `shiftL` 8 .|. fromIntegral b
 
 -- Get head parser
 headP :: Parsec [a] u a
@@ -114,25 +120,38 @@ midiHeaderP = do
     dataLengthP :: Parsec [Word8] u Int
     dataLengthP = do
       dataLengthBytes <- takeP 4
-      return 6 -- TODO Change but mostly 6
+      return 6 -- TODO Change but I think always 6
 
     -- Parser of MIDI Format
     midiFormatP :: Parsec [Word8] u MidiFormat
     midiFormatP = do
+      -- Get format in [Word8]
       formatBytes <- takeP 2
-      return MidiFormat2 -- TODO implement
+      -- Convert [Word8] to Int
+      let formatInt = bytesToNum formatBytes :: Int
+      case formatInt of
+        0 -> return MidiFormat0
+        1 -> return MidiFormat1
+        2 -> return MidiFormat2
+        _ -> unexpected ("Unexpected format number: " ++ show formatInt)
 
     -- Parser of the number of tracks
     tracksNumP :: Parsec [Word8] u Int
     tracksNumP = do
+      -- Get the number of tracks in [Word8]
       tracksNumBytes <- takeP 2
-      return (-1) -- TODO implement
+      -- Convert [Word8] to Int
+      let tracksNum = bytesToNum tracksNumBytes :: Int
+      return tracksNum
 
     -- Parser of Time Unit
     timeUnitP :: Parsec [Word8] u Int
     timeUnitP = do
+      -- Get the number of time unit in [Word8]
       timeUnitBytes <- takeP 2
-      return (-1) -- TODO implement
+      -- Convert [Word8] to Int
+      let timeUnit = bytesToNum timeUnitBytes :: Int
+      return timeUnit
 
 
 main :: IO ()
