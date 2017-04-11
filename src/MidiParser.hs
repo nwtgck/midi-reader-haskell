@@ -49,7 +49,7 @@ data DeltaTime  = DeltaTime Integer deriving (Show, Eq)
 data MidiEvent =  NoteOff {getChannel :: Word8, getPitch :: Word8, getVelocity :: Word8}
                 | NoteOn  {getChannel :: Word8, getPitch :: Word8, getVelocity :: Word8}
                 | ControlChange {first :: Word8, second :: Word8, third :: Word8}
-                | SysExtF0 {getEventData :: [Word8]}
+                | SysExF0 {getEventData :: [Word8]}
                 | SysExF7 {getEventData :: [Word8]}
                 | MetaEvent MetaEvent
                 deriving (Show, Eq)
@@ -323,7 +323,7 @@ midiTrackP = do
         sysExF0P = do
           eventLen <- fromIntegral <$> variableLengthP -- This should be in 1~4-byte-integer -- fromIntegral :: Integer -> Int
           eventData <- takeP eventLen
-          return (SysExtF0 eventData)
+          return (SysExF0 eventData)
 
         sysExF7P :: Parsec [Word8] u MidiEvent
         sysExF7P = do
