@@ -49,6 +49,7 @@ data DeltaTime  = DeltaTime Integer deriving (Show, Eq)
 data MidiEvent =  NoteOff {getChannel :: Word8, getPitch :: Word8, getVelocity :: Word8}
                 | NoteOn  {getChannel :: Word8, getPitch :: Word8, getVelocity :: Word8}
                 | ControlChange {first :: Word8, second :: Word8, third :: Word8}
+                | SysExtF0 {getEventData :: [Word8]}
                 | MetaEvent MetaEvent
                 deriving (Show, Eq)
 
@@ -62,6 +63,7 @@ data MetaEvent =  CommentEvent ByteString
                 | MeasureEvent {getNn :: Word8, getDd :: Word8, getCc :: Word8, getBb :: Word8}
                 | KeyEvent {getSharpOrFlat :: SharpOrFlat, getSharpOrFlatNum :: Int, getKey :: Key}
                 | FinishTrackEvent
+                | UnknownEvent {getEventType :: Word8, getBytes :: [Word8]}
                 deriving (Show, Eq)
 
 -- Major key or Minor Key
@@ -239,6 +241,26 @@ midiTrackP = do
           deltaTimesAndEvents <- deltaTimesAndEventsP
           return $ (deltaTime, midiEvent) : deltaTimesAndEvents
 
+
+    -- Parser of variable length
+    variableLengthP :: Parsec [Word8] u Integer
+    variableLengthP = _7bitsListToNum <$> deltaTime7bitsListP
+      where
+        -- Get sequence delta-time bytes (7bits)
+        deltaTime7bitsListP :: Parsec [Word8] u [Word8]
+        deltaTime7bitsListP = do
+          b <- headP
+          if (testBit b 7)
+            then ((clearBit b 7) :) <$> deltaTime7bitsListP
+            else return [b]
+
+        -- Convert [Word8 as 7bits] to (Num a => a)
+        -- hint: http://stackoverflow.com/a/31208816/2885946
+        _7bitsListToNum :: (Num a, Bits a) => [Word8] -> a
+        _7bitsListToNum = Prelude.foldl unstep 0
+          where
+            unstep a b = a `shiftL` 7 .|. fromIntegral b
+
     -- Parser of Delta Time
     deltaTimeP :: Parsec [Word8] u DeltaTime
     deltaTimeP = do
@@ -285,12 +307,12 @@ midiTrackP = do
         -- Put RunningStatus
         putState (Just (RunningStatus statusByte))
 
-
       if
         | 0x80 <= statusByte && statusByte <= 0x8F -> noteOffP (statusByte .&. 0x0F)
         | 0x90 <= statusByte && statusByte <= 0x9F -> noteOnP  (statusByte .&. 0x0F)
         | 0xA0 <= statusByte && statusByte <= 0xEF -> controlChangeP statusByte
-        | statusByte == 0xF0 || statusByte == 0xF7 -> unexpected ("StatusByte: SysEx is not implemented yet")
+        | statusByte == 0xF0                       -> sysExF0P
+        | statusByte == 0xF7                       -> unexpected ("StatusByte: SysEx(0xF7) is not implemented yet")
         | statusByte == 0xFF                       -> MetaEvent <$> metaEventP
         | otherwise                                -> unexpected ("Unexpected Status Byte: " ++ show statusByte)
 
@@ -313,6 +335,14 @@ midiTrackP = do
           third  <- headP
           return $ ControlChange first second third
 
+        sysExF0P :: Parsec [Word8] u MidiEvent
+        sysExF0P = do
+          eventLen <- fromIntegral <$> variableLengthP -- This should be in 1~4-byte-integer -- fromIntegral :: Integer -> Int
+          -- satisfyListHead (==0xF0)
+          eventData <- takeP eventLen
+          return (SysExtF0 eventData)
+
+
         metaEventP :: Parsec [Word8] u MetaEvent
         metaEventP = do
           eventType <- headP
@@ -326,7 +356,7 @@ midiTrackP = do
             | eventType == 0x58 -> measureP
             | eventType == 0x59 -> keyP
             | eventType == 0x2F -> finishTrackP
-            | otherwise         -> unexpected ("Unexpected Event Type: " ++ show eventType)
+            | otherwise         -> unknownEventP eventType
           where
 
             -- Read len, Take text by len
@@ -380,3 +410,9 @@ midiTrackP = do
                 0 -> return $ KeyEvent sf sfNum MajorKey
                 1 -> return $ KeyEvent sf sfNum MinorKey
                 _ -> unexpected ("ml should be 0 or 1: your input is " ++ show mlByte)
+
+            unknownEventP :: Word8 -> Parsec [Word8] u MetaEvent
+            unknownEventP eventType = do
+              len <- fromIntegral <$> headP -- fromIntegral :: Word8 -> Int
+              bytes <- takeP len
+              return $ UnknownEvent eventType bytes
