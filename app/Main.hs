@@ -1,11 +1,11 @@
 module Main where
 
 
-import           Data.ByteString.Lazy as BS
-import           Data.Word8
--- import           Text.Parsec          hiding (getInput)
 import           Control.Applicative
 import           Data.Bits
+import           Data.ByteString.Lazy as BS
+import           Data.Word8
+import           Text.Parsec          hiding (getInput)
 import           Text.Parsec.Prim
 
 
@@ -26,7 +26,7 @@ data MidiHeader = MidiHeader {
 
 -- MIDI Track
 data MidiTrack = MidiTrack {
-                   getDeltaTimeAndEvents :: [(DeltaTime, Event)]
+                   getDeltaTimesAndEvents :: [(DeltaTime, MidiEvent)]
                  }
                  deriving (Show, Eq)
 
@@ -34,14 +34,14 @@ data MidiTrack = MidiTrack {
 data MidiFormat = MidiFormat0 | MidiFormat1 | MidiFormat2 deriving (Show, Eq)
 
 -- DeltaTime
-data DeltaTime  = DeletaTime Integer deriving (Show, Eq)
+data DeltaTime  = DeltaTime Integer deriving (Show, Eq)
 
 -- Event
-data Event =  NoteOff {getChannel :: Word8, getPitch :: Word8, getVelocity :: Word8}
-            | NoteOn  {getChannel :: Word8, getPitch :: Word8, getVelocity :: Word8}
-            | ControlChange {first :: Word8, second :: Word8}
-            | MetaEvent MetaEvent
-            deriving (Show, Eq)
+data MidiEvent =  NoteOff {getChannel :: Word8, getPitch :: Word8, getVelocity :: Word8}
+                | NoteOn  {getChannel :: Word8, getPitch :: Word8, getVelocity :: Word8}
+                | ControlChange {first :: Word8, second :: Word8}
+                | MetaEvent MetaEvent
+                deriving (Show, Eq)
 
 -- Meta Event
 -- TODO [Word8] should be String
@@ -87,6 +87,13 @@ satisfyListHead p = do
     then return x
     else unexpected "Error in satisfyListHead"
 
+-- Parser of MIDI
+midiP :: Parsec [Word8] u Midi
+midiP = do
+  header <- midiHeaderP
+  tracks <- many1 midiTrackP
+  return $ Midi header tracks
+
 
 -- Parser for MIDI Header
 midiHeaderP :: Parsec [Word8] u MidiHeader
@@ -108,6 +115,7 @@ midiHeaderP = do
 
   where
     -- Parser of header-chunk-type
+    -- [NOTICE] this `chunkTypeP` is different from MIDI Track's
     chunkTypeP :: Parsec [Word8] u ()
     chunkTypeP = do
       satisfyListHead (==0x4D)
@@ -153,9 +161,71 @@ midiHeaderP = do
       let timeUnit = bytesToNum timeUnitBytes :: Int
       return timeUnit
 
+-- Parser of MIDI Track
+midiTrackP :: Parsec [Word8] u MidiTrack
+midiTrackP = do
+  -- Consume (=validate) Chunk Type
+  chunkTypeP
+  -- Get Data Length (I think I won't use it)
+  dataLength <- dataLengthP
+  -- Get Deleta-times and events
+  deltaTimesAndEvents <- deltaTimesAndEventsP
+
+  return $ MidiTrack deltaTimesAndEvents
+  where
+    -- Parser(=consumer) of MIDI Track Chunk type
+    -- [NOTICE] this `chunkTypeP` is different from MIDI Header's
+    chunkTypeP :: Parsec [Word8] u ()
+    chunkTypeP = do
+      satisfyListHead (==0x4D)
+      satisfyListHead (==0x54)
+      satisfyListHead (==0x72)
+      satisfyListHead (==0x6B)
+      return ()
+
+    -- Parser of Data Length (I think I won't use it)
+    dataLengthP :: Parsec [Word8] u Int
+    dataLengthP = bytesToNum <$> takeP 4
+
+    -- Parser of (Deleta-Time, MIDI Event)
+    deltaTimesAndEventsP :: Parsec [Word8] u [(DeltaTime, MidiEvent)]
+    deltaTimesAndEventsP = do
+      -- Get delta-time
+      deltaTime <- deltaTimeP
+      -- TODO implement
+      let midiEvent = NoteOn (-1) (-1) (-1)
+      return [(deltaTime, midiEvent)]
+
+    -- Parser of Delta Time
+    deltaTimeP :: Parsec [Word8] u DeltaTime
+    deltaTimeP = do
+      t <- _7bitsListToNum <$> deltaTime7bitsListP
+      return $ DeltaTime t
+      where
+        -- Get sequence delta-time bytes (7bits)
+        deltaTime7bitsListP :: Parsec [Word8] u [Word8]
+        deltaTime7bitsListP = do
+          b <- headP
+          if (testBit b 8)
+            then ((clearBit b 8) :) <$> deltaTime7bitsListP
+            else return [b]
+
+        -- Convert [Word8 as 7bits] to (Num a => a)
+        -- hint: http://stackoverflow.com/a/31208816/2885946
+        _7bitsListToNum :: (Num a, Bits a) => [Word8] -> a
+        _7bitsListToNum = Prelude.foldl unstep 0
+          where
+            unstep a b = a `shiftL` 7 .|. fromIntegral b
+
 
 main :: IO ()
 main = do
   bytes <- unpack <$> BS.readFile "./yokoso.mid"
+
+  -- MIDI Header
   parseTest midiHeaderP bytes
+
+  -- MIDI
+  parseTest midiP bytes
+
   return ()
