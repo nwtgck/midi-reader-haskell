@@ -130,7 +130,7 @@ midiHeaderP = do
 
   -- Consume(=validate) a chunk type
   chunkTypeP
-  -- Get Data Length
+  -- Get Data Length (I won't use it)
   dataLength <- dataLengthP
   -- Get MIDI format
   midiFormat <- midiFormatP
@@ -156,7 +156,7 @@ midiHeaderP = do
     dataLengthP :: Parsec [Word8] (Maybe RunningStatus) Int
     dataLengthP = do
       dataLengthBytes <- takeP 4
-      return 6 -- TODO Change but I think always 6
+      return $ bytesToNum dataLengthBytes
 
     -- Parser of MIDI Format
     midiFormatP :: Parsec [Word8] (Maybe RunningStatus) MidiFormat
