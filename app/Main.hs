@@ -1,3 +1,4 @@
+{-# LANGUAGE MultiWayIf #-}
 module Main where
 
 
@@ -217,6 +218,18 @@ midiTrackP = do
           where
             unstep a b = a `shiftL` 7 .|. fromIntegral b
 
+    -- Parser of MIDI Event
+    midiEventP :: Parsec [Word8] u MidiEvent
+    midiEventP = do
+      statusByte <- headP
+      undefined
+      if
+        | 0x80 <= statusByte && statusByte <= 0x8F -> undefined -- NoteOff
+        | 0x90 <= statusByte && statusByte <= 0x9F -> undefined -- NoteOn
+        | 0xA0 <= statusByte && statusByte <= 0xEF -> undefined -- ControlChange
+        | statusByte == 0xF0 || statusByte == 0xF7 -> undefined -- SysEx
+        | statusByte == 0xFF                       -> undefined -- MetaEvent
+        | otherwise                                -> unexpected ("Unexpected Status Byte: " ++ show statusByte)
 
 main :: IO ()
 main = do
