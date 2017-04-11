@@ -119,6 +119,9 @@ satisfyListHead p = do
     then return x
     else unexpected "Error in satisfyListHead"
 
+eqListHeadP :: (Show a, Eq a) => a -> Parsec [a] u a
+eqListHeadP e = satisfyListHead (==e) <?> show e
+
 -- Parser of MIDI
 midiP :: Parsec [Word8] (Maybe RunningStatus) Midi
 midiP = do
@@ -149,10 +152,10 @@ midiHeaderP = do
     -- [NOTICE] this `chunkTypeP` is different from MIDI Track's
     chunkTypeP :: Parsec [Word8] (Maybe RunningStatus) ()
     chunkTypeP = do
-      satisfyListHead (==0x4D)
-      satisfyListHead (==0x54)
-      satisfyListHead (==0x68)
-      satisfyListHead (==0x64)
+      eqListHeadP 0x4D
+      eqListHeadP 0x54
+      eqListHeadP 0x68
+      eqListHeadP 0x64
       return ()
 
     -- Parser of data length
@@ -217,10 +220,10 @@ midiTrackP = do
     -- [NOTICE] this `chunkTypeP` is different from MIDI Header's
     chunkTypeP :: Parsec [Word8] (Maybe RunningStatus) ()
     chunkTypeP = do
-      satisfyListHead (==0x4D)
-      satisfyListHead (==0x54)
-      satisfyListHead (==0x72)
-      satisfyListHead (==0x6B)
+      eqListHeadP 0x4D
+      eqListHeadP 0x54
+      eqListHeadP 0x72
+      eqListHeadP 0x6B
       return ()
 
     -- Parser of Data Length (I think I won't use it)
