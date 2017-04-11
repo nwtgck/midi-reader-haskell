@@ -263,24 +263,7 @@ midiTrackP = do
 
     -- Parser of Delta Time
     deltaTimeP :: Parsec [Word8] u DeltaTime
-    deltaTimeP = do
-      t <- _7bitsListToNum <$> deltaTime7bitsListP
-      return $ DeltaTime t
-      where
-        -- Get sequence delta-time bytes (7bits)
-        deltaTime7bitsListP :: Parsec [Word8] u [Word8]
-        deltaTime7bitsListP = do
-          b <- headP
-          if (testBit b 7)
-            then ((clearBit b 7) :) <$> deltaTime7bitsListP
-            else return [b]
-
-        -- Convert [Word8 as 7bits] to (Num a => a)
-        -- hint: http://stackoverflow.com/a/31208816/2885946
-        _7bitsListToNum :: (Num a, Bits a) => [Word8] -> a
-        _7bitsListToNum = Prelude.foldl unstep 0
-          where
-            unstep a b = a `shiftL` 7 .|. fromIntegral b
+    deltaTimeP = DeltaTime <$> variableLengthP
 
     -- Parser of MIDI Event
     midiEventP :: Parsec [Word8] (Maybe RunningStatus) MidiEvent
@@ -338,7 +321,6 @@ midiTrackP = do
         sysExF0P :: Parsec [Word8] u MidiEvent
         sysExF0P = do
           eventLen <- fromIntegral <$> variableLengthP -- This should be in 1~4-byte-integer -- fromIntegral :: Integer -> Int
-          -- satisfyListHead (==0xF0)
           eventData <- takeP eventLen
           return (SysExtF0 eventData)
 
