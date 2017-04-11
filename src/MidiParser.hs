@@ -50,6 +50,7 @@ data MidiEvent =  NoteOff {getChannel :: Word8, getPitch :: Word8, getVelocity :
                 | NoteOn  {getChannel :: Word8, getPitch :: Word8, getVelocity :: Word8}
                 | ControlChange {first :: Word8, second :: Word8, third :: Word8}
                 | SysExtF0 {getEventData :: [Word8]}
+                | SysExF7 {getEventData :: [Word8]}
                 | MetaEvent MetaEvent
                 deriving (Show, Eq)
 
@@ -295,7 +296,7 @@ midiTrackP = do
         | 0x90 <= statusByte && statusByte <= 0x9F -> noteOnP  (statusByte .&. 0x0F)
         | 0xA0 <= statusByte && statusByte <= 0xEF -> controlChangeP statusByte
         | statusByte == 0xF0                       -> sysExF0P
-        | statusByte == 0xF7                       -> unexpected ("StatusByte: SysEx(0xF7) is not implemented yet")
+        | statusByte == 0xF7                       -> sysExF7P
         | statusByte == 0xFF                       -> MetaEvent <$> metaEventP
         | otherwise                                -> unexpected ("Unexpected Status Byte: " ++ show statusByte)
 
@@ -323,6 +324,12 @@ midiTrackP = do
           eventLen <- fromIntegral <$> variableLengthP -- This should be in 1~4-byte-integer -- fromIntegral :: Integer -> Int
           eventData <- takeP eventLen
           return (SysExtF0 eventData)
+
+        sysExF7P :: Parsec [Word8] u MidiEvent
+        sysExF7P = do
+          eventLen <- fromIntegral <$> variableLengthP -- This should be in 1~4-byte-integer -- fromIntegral :: Integer -> Int
+          eventData <- takeP eventLen
+          return (SysExF7 eventData)
 
 
         metaEventP :: Parsec [Word8] u MetaEvent
