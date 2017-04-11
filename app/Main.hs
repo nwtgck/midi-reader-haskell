@@ -8,6 +8,7 @@ import           Control.Monad
 import           Data.Bits
 import           Data.ByteString.Lazy as BS
 import           Data.Word8
+import           System.Environment
 import           Text.Parsec          hiding (getInput)
 import           Text.Parsec.Prim
 
@@ -262,9 +263,12 @@ midiTrackP = do
     -- Parser of MIDI Event
     midiEventP :: Parsec [Word8] (Maybe RunningStatus) MidiEvent
     midiEventP = do
+      -- Get head
       headByte <- headP
 
+      -- Dicide statusByte
       statusByte <-
+        -- if MSB is 1
         if testBit headByte 7
           then return headByte
           else do
@@ -276,21 +280,19 @@ midiTrackP = do
                 return b
               Nothing                -> unexpected ("StatusByte is nothing" ++ show headByte)
 
-      if statusByte /= 0xFF
+      -- if not meta event
+      when (statusByte /= 0xFF) $ do
         -- Put RunningStatus
-        then putState (Just (RunningStatus statusByte))
-        else return ()
+        putState (Just (RunningStatus statusByte))
 
 
-      let ev = if
-                | 0x80 <= statusByte && statusByte <= 0x8F -> noteOffP (statusByte .&. 0x0F)
-                | 0x90 <= statusByte && statusByte <= 0x9F -> noteOnP  (statusByte .&. 0x0F)
-                | 0xA0 <= statusByte && statusByte <= 0xEF -> controlChangeP statusByte
-                | statusByte == 0xF0 || statusByte == 0xF7 -> unexpected ("StatusByte: SysEx is not implemented yet")
-                | statusByte == 0xFF                       -> MetaEvent <$> metaEventP
-                | otherwise                                -> unexpected ("Unexpected Status Byte: " ++ show statusByte)
-
-      ev
+      if
+        | 0x80 <= statusByte && statusByte <= 0x8F -> noteOffP (statusByte .&. 0x0F)
+        | 0x90 <= statusByte && statusByte <= 0x9F -> noteOnP  (statusByte .&. 0x0F)
+        | 0xA0 <= statusByte && statusByte <= 0xEF -> controlChangeP statusByte
+        | statusByte == 0xF0 || statusByte == 0xF7 -> unexpected ("StatusByte: SysEx is not implemented yet")
+        | statusByte == 0xFF                       -> MetaEvent <$> metaEventP
+        | otherwise                                -> unexpected ("Unexpected Status Byte: " ++ show statusByte)
 
       where
         noteOffP :: Word8 -> Parsec [Word8] u MidiEvent
@@ -374,8 +376,6 @@ midiTrackP = do
                           else Sharp
 
                   sfNum = fromIntegral $ clearBit sfByte 7
-
-
               case mlByte of
                 0 -> return $ KeyEvent sf sfNum MajorKey
                 1 -> return $ KeyEvent sf sfNum MinorKey
@@ -384,22 +384,29 @@ midiTrackP = do
 
 main :: IO ()
 main = do
-  bytes <- unpack <$> BS.readFile "./yokoso.mid"
+  args <- getArgs
+  case args of
+    [filePath] -> do
+      -- Read bytes from the file path
+      bytes <- unpack <$> BS.readFile filePath
 
-  case runParser midiP Nothing "name" bytes of
-    Right (midi)  -> do
-      let Midi header ts = midi
+      -- Run parser
+      case runParser midiP Nothing "name" bytes of
+        Right (midi)  -> do
+          -- Get midi header and tracks
+          let Midi header tracks = midi
 
-      Prelude.putStrLn "Header"
-      print header
+          -- Print header
+          Prelude.putStrLn "Header"
+          print header
 
-      print $ Prelude.length ts
+          -- Print tracks
+          forM_ (Prelude.zip [1..] tracks) $ \(num, track) -> do
+            Prelude.putStrLn $ "Track" ++ show num
+            let MidiTrack xs = track
+            mapM_ print xs
 
-      forM_ (Prelude.zip [1..] ts) $ \(num, track) -> do
-        Prelude.putStrLn $ "Track" ++ show num
-        let MidiTrack xs = track
-        mapM_ print xs
+        Left (excep)  -> print excep
 
-    Left (excep)  -> print excep
-
-  return ()
+    _          -> do
+      Prelude.putStrLn "Usage: ./midi-reader <file-path>"
