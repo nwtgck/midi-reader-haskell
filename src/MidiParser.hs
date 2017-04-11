@@ -117,7 +117,7 @@ satisfyListHead p = do
   x <- headP
   if p x
     then return x
-    else unexpected "Error in satisfyListHead"
+    else unexpected "No head error in satisfyListHead"
 
 eqListHeadP :: (Show a, Eq a) => a -> Parsec [a] u a
 eqListHeadP e = satisfyListHead (==e) <?> show e
