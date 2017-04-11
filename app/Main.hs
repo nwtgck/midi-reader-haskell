@@ -17,7 +17,7 @@ main = do
       bytes <- unpack <$> BS.readFile filePath
 
       -- Run parser
-      case runParser midiP Nothing "name" bytes of
+      case runParser midiP Nothing "MIDI(SMF) Parsing" bytes of
         Right (midi)  -> do
           -- Get midi header and tracks
           let Midi header tracks = midi

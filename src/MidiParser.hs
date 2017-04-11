@@ -121,18 +121,13 @@ midiP :: Parsec [Word8] (Maybe RunningStatus) Midi
 midiP = do
   header <- midiHeaderP
   tracks <- midiTracksP
-  -- track <- midiTrackP
 
   return $ Midi header tracks
-  -- return $ Midi header [track]
-
 
 
 -- Parser for MIDI Header
 midiHeaderP :: Parsec [Word8] (Maybe RunningStatus) MidiHeader
 midiHeaderP = do
-  {- [NOTICE]: The order is important -}
-
   -- Consume(=validate) a chunk type
   chunkTypeP
   -- Get Data Length (I won't use it)
